@@ -1,0 +1,11 @@
+import { beforeEach, expect, it, vi } from "vitest";
+const mocks = vi.hoisted(()=>({cookie:vi.fn(),verifyToken:vi.fn(),verifyCookie:vi.fn(),get:vi.fn()}));
+vi.mock("next/headers",()=>({cookies:async()=>({get:mocks.cookie})}));
+vi.mock("@/server/firebase/admin",()=>({adminServices:()=>({auth:{verifyIdToken:mocks.verifyToken,verifySessionCookie:mocks.verifyCookie},db:{doc:()=>({get:mocks.get})}})}));
+import { authenticate, authorize, assertSameOrigin } from "@/server/auth";
+beforeEach(()=>{vi.resetAllMocks();process.env.APP_ORIGIN="https://lashess-priir.example";process.env.SALON_ID="lashess-priir";});
+it("rejects an unauthenticated request",async()=>{await expect(authenticate(new Request("https://lashess-priir.example/api/v1/users/me"))).rejects.toMatchObject({status:401});});
+it("verifies bearer token with revocation checks",async()=>{mocks.verifyToken.mockResolvedValue({uid:"a"});await expect(authenticate(new Request("https://lashess-priir.example/api/v1/users/me",{headers:{authorization:"Bearer token"}}))).resolves.toMatchObject({uid:"a"});expect(mocks.verifyToken).toHaveBeenCalledWith("token",true);});
+it("does not fall back to cookie when bearer is invalid",async()=>{mocks.verifyToken.mockRejectedValue(new Error());mocks.cookie.mockReturnValue({value:"valid-cookie"});await expect(authenticate(new Request("https://lashess-priir.example",{headers:{authorization:"Bearer invalid"}}))).rejects.toMatchObject({status:401});expect(mocks.verifyCookie).not.toHaveBeenCalled();});
+it("rejects cross-origin session writes",()=>{expect(()=>assertSameOrigin(new Request("https://lashess-priir.example",{headers:{origin:"https://attacker.example"}}))).toThrow();expect(()=>assertSameOrigin(new Request("https://lashess-priir.example",{headers:{origin:"https://lashess-priir.example"}}))).not.toThrow();});
+it("cannot turn a customer into admin using token claims",async()=>{mocks.get.mockResolvedValueOnce({data:()=>({uid:"a",salonId:"lashess-priir",active:true,role:"customer"})}).mockResolvedValueOnce({exists:true,data:()=>({active:true})});await expect(authorize({uid:"a",role:"owner"} as never,["admin","owner"])).rejects.toMatchObject({status:403});});

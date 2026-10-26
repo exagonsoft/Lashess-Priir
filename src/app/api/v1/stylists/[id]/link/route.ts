@@ -1,0 +1,14 @@
+import { z } from "zod";
+import { FieldValue } from "firebase-admin/firestore";
+import { authenticate, authorize } from "@/server/auth";
+import { adminServices } from "@/server/firebase/admin";
+import { recordId } from "@/server/business-mutations";
+import { ApiError, handler, jsonBody, ok } from "@/server/api/errors";
+export const runtime="nodejs";
+export const POST=handler(async req=>{const actor=await authorize(await authenticate(req),["owner","admin"]);const id=recordId.parse(new URL(req.url).pathname.split("/").at(-2));const {uid}=z.object({uid:recordId}).strict().parse(await jsonBody(req));const {db,auth}=adminServices();const user=await auth.getUser(uid);if(user.disabled)throw new ApiError("CONFLICT",409,"La cuenta está deshabilitada");const base="salons/"+actor.salonId;const ref=db.doc(base+"/stylists/"+id);
+ await db.runTransaction(async tx=>{const [staff,member,linked]=await Promise.all([tx.get(ref),tx.get(db.doc(base+"/members/"+uid)),tx.get(db.collection(base+"/stylists").where("uid","==",uid).limit(2))]);const d=staff.data(),m=member.data();
+ if(!d||d.salonId!==actor.salonId||d.fixture===true||d.active!==true)throw new ApiError("CONFLICT",409,"Se requiere un perfil profesional real y activo");
+ if(!m||m.uid!==uid||m.salonId!==actor.salonId||m.role!=="stylist"||m.active!==true)throw new ApiError("CONFLICT",409,"La cuenta debe tener una membresía activa de especialista asignada previamente");
+ if((d.uid&&d.uid!==uid)||linked.docs.some(doc=>doc.id!==id))throw new ApiError("CONFLICT",409,"La cuenta o el perfil ya tiene otra vinculación");
+ tx.update(ref,{uid,updatedAt:FieldValue.serverTimestamp()});tx.create(db.collection(base+"/auditLogs").doc(),{salonId:actor.salonId,actorUid:actor.uid,action:"link.stylist",resourcePath:ref.path,linkedUid:uid,createdAt:FieldValue.serverTimestamp()});
+ });return ok({linked:true});});

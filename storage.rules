@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+ match /b/{bucket}/o {
+  function member(salon) { return request.auth != null && firestore.get(/databases/(default)/documents/salons/$(salon)).data.active == true && firestore.exists(/databases/(default)/documents/salons/$(salon)/members/$(request.auth.uid)) && firestore.get(/databases/(default)/documents/salons/$(salon)/members/$(request.auth.uid)).data.active == true; }
+  function admin(salon) { return member(salon) && firestore.get(/databases/(default)/documents/salons/$(salon)/members/$(request.auth.uid)).data.role in ['owner','admin']; }
+  match /salons/{salon}/{kind}/{resource}/{owner}/{file} {
+   allow read: if admin(salon) || (member(salon) && kind in ['salonImages','serviceImages','stylistPortraits']) || (member(salon) && owner == request.auth.uid && kind == 'reviewAttachments') || (member(salon) && kind == 'chatAttachments' && request.auth.uid in firestore.get(/databases/(default)/documents/salons/$(salon)/chatThreads/$(resource)).data.participantUids);
+   // Upload APIs and transactional attachment ownership arrive in Milestone 02.
+   // Even resource owners cannot upload or overwrite arbitrary blobs directly.
+   allow write: if false;
+  }
+  match /{allPaths=**} { allow read, write: if false; }
+ }
+}

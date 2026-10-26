@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+coverage/
+.env*
+.env.example
+*.pem
+*service-account*.json
+*-debug.log
+.firebase/
+playwright-report/
+test-results/
+.validation/
+*.tsbuildinfo
+docs

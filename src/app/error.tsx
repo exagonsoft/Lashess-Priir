@@ -1,0 +1,2 @@
+"use client";
+export default function ErrorPage({reset}: {reset: () => void}) { return <main className="min-h-screen bg-soft-white p-10 text-center"><h1 className="font-display text-3xl text-plum">No se pudo cargar este espacio</h1><p className="my-4 text-muted">Intentá nuevamente. Si el problema continúa, contactá al equipo.</p><button onClick={reset} className="rounded-md bg-plum px-6 py-3 text-white">Reintentar</button></main>; }

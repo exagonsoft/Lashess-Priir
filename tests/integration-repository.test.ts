@@ -1,0 +1,16 @@
+import { beforeEach, expect, it, vi } from "vitest";
+const mocks=vi.hoisted(()=>({rows:[] as {id:string;data:()=>Record<string,unknown>}[],calls:[] as unknown[][]}));
+vi.mock("@/server/firebase/admin",()=>({adminServices:()=>({db:{doc:()=>({get:async()=>({data:()=>({active:true})})}),collection:(path:string)=>{mocks.calls.push(["collection",path]);const query={where:(...args:unknown[])=>{mocks.calls.push(["where",...args]);return query;},orderBy:()=>query,limit:(n:number)=>{mocks.calls.push(["limit",n]);return query;},startAfter:(id:string)=>{mocks.calls.push(["cursor",id]);return query;},get:async()=>({docs:mocks.rows,size:mocks.rows.length})};return query;}}})}));
+import { listRecords } from "@/server/integration";
+import type { Actor } from "@/server/auth";
+const actor=(role="customer")=>({uid:"user",salonId:"lashess-priir",role}) as Actor;
+beforeEach(()=>{mocks.rows=[];mocks.calls=[];process.env.SALON_ID="lashess-priir";});
+it("scopes customer appointments by verified UID and salon",async()=>{await listRecords("APPOINTMENTS",{limit:25},actor());expect(mocks.calls).toContainEqual(["collection","salons/lashess-priir/appointments"]);expect(mocks.calls).toContainEqual(["where","customerUid","==","user"]);});
+it("scopes stylist assignments",async()=>{await listRecords("APPOINTMENTS",{limit:25},actor("stylist"));expect(mocks.calls).toContainEqual(["where","stylistUid","==","user"]);});
+it("scopes conversations by participants",async()=>{await listRecords("CONVERSATIONS",{limit:25},actor());expect(mocks.calls).toContainEqual(["where","participantUids","array-contains","user"]);});
+it("checks financial authorization before querying",async()=>{await expect(listRecords("EXPENSES",{limit:25},actor("stylist"))).rejects.toMatchObject({status:403});expect(mocks.calls).toHaveLength(0);});
+it("rejects mismatched tenant documents",async()=>{mocks.rows=[{id:"a",data:()=>({salonId:"other"})}];await expect(listRecords("APPOINTMENTS",{limit:25},actor())).rejects.toThrow("tenant");});
+it("does not expose sample records to customers",async()=>{mocks.rows=[{id:"a",data:()=>({salonId:"lashess-priir",fixture:true})}];expect((await listRecords("APPOINTMENTS",{limit:25},actor())).items).toEqual([]);});
+it("excludes hidden and sample public services",async()=>{mocks.rows=[{id:"s",data:()=>({salonId:"lashess-priir",active:true,fixture:true})},{id:"h",data:()=>({salonId:"lashess-priir",active:true,visible:false})}];expect((await listRecords("SERVICES",{limit:25})).items).toEqual([]);expect(mocks.calls).toContainEqual(["where","active","==",true]);});
+it("paginates and applies appointment filters",async()=>{await listRecords("APPOINTMENTS",{limit:10,cursor:"last",status:"confirmed",stylistId:"st"},actor("admin"));expect(mocks.calls).toContainEqual(["limit",11]);expect(mocks.calls).toContainEqual(["cursor","last"]);expect(mocks.calls).toContainEqual(["where","status","==","confirmed"]);expect(mocks.calls).toContainEqual(["where","stylistId","==","st"]);});
+it("returns an honest empty page",async()=>expect(await listRecords("PRODUCTS",{limit:25},actor("admin"))).toEqual({items:[],nextCursor:null,scanned:0}));

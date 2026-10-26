@@ -1,0 +1,17 @@
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { expect, it, vi } from "vitest";
+vi.mock("@/features/auth/AuthProvider",()=>({useAuth:()=>({me:{uid:"real-uid",salonId:"lashess-priir",role:"customer",profile:{displayName:"Persona real"}},loading:false})}));
+vi.mock("@/lib/navigation",()=>({Link:({children}:{children:React.ReactNode})=>React.createElement("span",null,children),useNavigate:()=>()=>{},useParams:()=>({slug:"missing"})}));
+vi.mock("@/features/crm/CrmShell",()=>({default:({children}:{children:React.ReactNode})=>React.createElement("main",null,children)}));
+import { DataNotice } from "@/features/data/LiveData";
+import { ServicesPage, ServiceDetailPage } from "@/features/public/Services";
+import { StylistDetailPage } from "@/features/public/Stylists";
+import { CrmServicios } from "@/features/crm/CrmPersonal";
+const render=(component:React.ComponentType)=>renderToStaticMarkup(React.createElement(component));
+it("renders a real empty service catalog",()=>expect(render(ServicesPage)).toContain("No encontramos tratamientos"));
+it("does not substitute the first service for a missing detail",()=>expect(render(ServiceDetailPage)).toContain("no está disponible"));
+it("does not substitute a sample stylist for a missing detail",()=>expect(render(StylistDetailPage)).toContain("no está disponible"));
+it("renders an empty CRM service editor without dereferencing the first item",()=>expect(render(CrmServicios)).toContain("No hay servicios registrados"));
+it("renders an actionable error without database internals",()=>{const html=renderToStaticMarkup(React.createElement(DataNotice,{message:"No se pudieron cargar los datos",retry:()=>{},login:true}));expect(html).toContain('role="alert"');expect(html).toContain("Reintentar");expect(html).toContain("Iniciar sesión");});
+it("renders a loading status",()=>expect(renderToStaticMarkup(React.createElement(DataNotice,{message:"Cargando datos…"}))).toContain('role="status"'));

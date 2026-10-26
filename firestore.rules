@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function signedIn() { return request.auth != null; }
+  function member(salon) { return signedIn() && get(/databases/$(database)/documents/salons/$(salon)).data.active == true && exists(/databases/$(database)/documents/salons/$(salon)/members/$(request.auth.uid)) && get(/databases/$(database)/documents/salons/$(salon)/members/$(request.auth.uid)).data.active == true; }
+  function role(salon) { return get(/databases/$(database)/documents/salons/$(salon)/members/$(request.auth.uid)).data.role; }
+  function admin(salon) { return member(salon) && role(salon) in ['owner','admin']; }
+  function operations(salon) { return member(salon) && role(salon) in ['owner','admin','receptionist']; }
+  function bounded() { return request.query.limit != null && request.query.limit <= 100; }
+  match /users/{uid} { allow get: if signedIn() && request.auth.uid == uid; }
+  match /salons/{salon} {
+   allow get: if member(salon);
+   match /members/{uid} { allow get: if member(salon) && (request.auth.uid == uid || admin(salon)); }
+   match /customers/{uid} { allow get: if member(salon) && (request.auth.uid == uid || operations(salon) || (role(salon) == 'stylist' && request.auth.uid in resource.data.assignedStylistUids)); }
+   match /stylists/{uid} { allow get: if member(salon) && (request.auth.uid == uid || operations(salon)); }
+   match /services/{id} { allow get: if member(salon); allow list: if member(salon) && bounded(); }
+   match /appointments/{id} {
+    function canRead() { return member(salon) && (operations(salon) || (role(salon) == 'customer' && resource.data.customerUid == request.auth.uid) || (role(salon) == 'stylist' && resource.data.stylistUid == request.auth.uid)); }
+    allow get: if canRead(); allow list: if canRead() && bounded();
+   }
+   match /chatThreads/{id} {
+    allow get: if member(salon) && request.auth.uid in resource.data.participantUids;
+    allow list: if member(salon) && request.auth.uid in resource.data.participantUids && bounded();
+    match /messages/{message} { allow read: if member(salon) && request.auth.uid in get(/databases/$(database)/documents/salons/$(salon)/chatThreads/$(id)).data.participantUids && (request.method == 'get' || bounded()); }
+   }
+   match /notifications/{id} { allow get: if member(salon) && resource.data.recipientUid == request.auth.uid; allow list: if member(salon) && resource.data.recipientUid == request.auth.uid && bounded(); }
+   match /{collection}/{id} { allow get: if collection in ['payments','products','inventoryMovements','suppliers','purchases','expenses','commissions','reviews','bookingHolds','auditLogs'] && admin(salon); allow list: if collection in ['products','inventoryMovements','reviews'] && admin(salon) && bounded(); }
+  }
+  // All writes, unmatched reads, cross-salon access and client role changes are denied.
+  match /{document=**} { allow read, write: if false; }
+ }
+}
