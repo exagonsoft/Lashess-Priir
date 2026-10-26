@@ -7,7 +7,7 @@ frontend:
         - npm ci
     build:
       commands:
-        - node scripts/amplify-env.mjs
+        - node scripts/check-firebase-key.cjs
         - npm run typecheck
         - npm run lint
         - npm test
