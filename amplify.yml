@@ -1,20 +1,25 @@
 version: 1
+
 frontend:
   phases:
     preBuild:
       commands:
         - nvm use 22
         - npm ci
+
     build:
       commands:
+        - env | grep -E '^(NEXT_PUBLIC_FIREBASE_|APP_ORIGIN=|SALON_ID=|FIREBASE_PROJECT_ID=|FIREBASE_CLIENT_EMAIL=|FIREBASE_PRIVATE_KEY=)' >> .env.production
         - npm run typecheck
         - npm run lint
         - npm test
         - npm run build
+
   artifacts:
     baseDirectory: .next
     files:
       - '**/*'
+
   cache:
     paths:
       - node_modules/**/*
