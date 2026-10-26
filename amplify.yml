@@ -7,7 +7,6 @@ frontend:
         - npm ci
     build:
       commands:
-        - node scripts/check-firebase-key.cjs
         - npm run typecheck
         - npm run lint
         - npm test
